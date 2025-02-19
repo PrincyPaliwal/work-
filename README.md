@@ -62,50 +62,7 @@ cloudformation_client = boto3.client('cloudformation', region_name=AWS_REGION)
 
 # --- Combined Function Definitions and Execution ---
 
-
-# Step 1: Setting Up the Spark Session
-# In this step, we will create a Spark session with Delta Lake enabled. This is necessary for reading and writing data to Delta tables.
-
-def create_spark_session(): 
-    return SparkSession.builder.appName("AWS-Glue-Kinesis-Databricks") \ 
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \ 
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \ 
-        .getOrCreate() 
-
-# 2. Reading Data from Kinesis
-
-# In this step, we will read real-time data from the Kinesis stream using Spark Structured Streaming. This will help us to continuously process incoming data.
-
-def read_from_kinesis(spark, stream_name, region): 
-    return spark.readStream.format("kinesis") \ 
-        .option("streamName", stream_name) \ 
-        .option("region", region) \ 
-        .option("startingPosition", "LATEST") \ 
-        .load() 
-
-# 3. Processing and Writing Data to Delta Lake
-# Here, we process the data coming from Kinesis and write it to a Delta Lake table with schema evolution enabled.
-
-def process_and_write_to_delta(df, delta_path): 
-    query = df.selectExpr("CAST(data AS STRING) as jsonData") \ 
-        .select(col("jsonData")) \ 
-        .writeStream \ 
-        .format("delta") \ 
-        .option("checkpointLocation", delta_path + "/_checkpoints/") \ 
-        .option("mergeSchema", "true") \ 
-        .outputMode("append") \ 
-        .start(delta_path) 
-    return query 
-
-# 4. Lambda Function to Trigger Data Pipeline
-# In this step, we simulate a Lambda function that will trigger the data ingestion pipeline. We set up the Kinesis stream reading and Delta Lake writing inside this function.
-def lambda_handler(event, context): 
-    spark = create_spark_session() 
-    df = read_from_kinesis(spark, KINESIS_STREAM_NAME, AWS_REGION) 
-    query = process_and_write_to_delta(df, delta_path) 
-    query.awaitTermination() 
-
-# Step 2: AWS Infrastructure Setup using CloudFormation
+# Step 1: AWS Infrastructure Setup using CloudFormation
 def create_cloudformation_stack():
     template_body = f"""
     AWSTemplateFormatVersion: '2010-09-09'
@@ -133,7 +90,7 @@ def create_cloudformation_stack():
     )
     return response
 
-# Step 3: AWS Glue Crawler Setup
+# Step 2: AWS Glue Crawler Setup
 def create_and_start_glue_crawler():
     response = glue_client.create_crawler(
         Name=GLUE_CRAWLER_NAME,
@@ -144,7 +101,7 @@ def create_and_start_glue_crawler():
     glue_client.start_crawler(Name=GLUE_CRAWLER_NAME)
     return response
 
-# Step 4: AWS EventBridge Rule Setup
+# Step 3: AWS EventBridge Rule Setup
 def setup_eventbridge_rule():
     response = events_client.put_rule(
         Name='GlueCrawlerCompleteRule',
@@ -163,7 +120,7 @@ def setup_eventbridge_rule():
     )
     return response, target_response
 
-# Step 5: Databricks Notebook Execution and Monitoring (Lambda Function)
+# Step 4: Databricks Notebook Execution and Monitoring (Lambda Function)
 def trigger_databricks_notebook(event, context):
     headers = {"Authorization": f"Bearer {DATABRICKS_TOKEN}"}
     payload = {"notebook_path": DATABRICKS_NOTEBOOK_PATH, "params": {}}
@@ -186,7 +143,7 @@ def trigger_databricks_notebook(event, context):
       return {"statusCode": 500, "body": f"Failed to trigger Databricks notebook. Response: {response.text}"}
 
 
-# Step 6: Kinesis Stream Processing (Databricks - run in a notebook)
+# Step 5: Kinesis Stream Processing (Databricks - run in a notebook)
 def process_kinesis_stream():
     spark = SparkSession.builder.appName("KinesisToDelta").getOrCreate() # Create Spark Session inside the notebook
     df = spark.readStream.format("kinesis") \
@@ -213,13 +170,14 @@ def lambda_handler(event, context):
     response = trigger_databricks_notebook(event, context)
     return response
 
-# --- Local Testing ---
-   if __name__ == "__main__":
-     create_cloudformation_stack()
-     create_and_start_glue_crawler()
-     setup_eventbridge_rule()
-#     # process_kinesis_stream() # Run this in Databricks notebook
+# --- Local Testing (Optional) ---
+# if __name__ == "__main__":
+#     create_cloudformation_stack()
+#     create_and_start_glue_crawler()
+#     setup_eventbridge_rule()
+#      process_kinesis_stream() # Run this in Databricks notebook
 
+```
 ## Contributions
 Feel free to submit pull requests for improvements or additional features.
  
@@ -227,4 +185,5 @@ Feel free to submit pull requests for improvements or additional features.
 This project is licensed under the **MIT License**.
  
 ## Contact
-For issues or support, reach out via **GitHub Issues** or email the project maintainer.
+For issues or support, reach out via **GitHub Issues** or email the project maintainer
+
