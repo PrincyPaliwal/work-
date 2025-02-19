@@ -175,9 +175,9 @@ def lambda_handler(event, context):
 #     create_cloudformation_stack()
 #     create_and_start_glue_crawler()
 #     setup_eventbridge_rule()
-#     # process_kinesis_stream() # Run this in Databricks notebook
+#      process_kinesis_stream() # Run this in Databricks notebook
 
-
+```
 ## Contributions
 Feel free to submit pull requests for improvements or additional features.
  
@@ -186,3 +186,4 @@ This project is licensed under the **MIT License**.
  
 ## Contact
 For issues or support, reach out via **GitHub Issues** or email the project maintainer
+
