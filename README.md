@@ -1,44 +1,47 @@
-# Real-time Streaming Analytics Accelerator
+# Serverless Databricks Job Orchestrator
 
-This accelerator provides a framework for processing real-time data streams using AWS services like Amazon Kinesis, AWS Lambda, and Databricks Structured Streaming. It's designed to handle high-volume data ingestion, transformation, and storage for various use cases.
+This solution eliminates the need for managing a separate orchestration tool like Airflow by leveraging AWS-native services such as Step Functions and Lambda to orchestrate Databricks notebook execution.
 
-## Realtime Streaming Analytics Architecture Flow
+## Serverless Databricks Job Orchestrator Architecture Flow
 
-![Realtime_Streaming_Analytics_Architecture](docs/icons/Realtime_Streaming_Analytics.png)
+![Serverless Databricks Job Orchestrator Architecture](docs/icons/Serverless_Databricks_Job_Orchestrator.png)
 
-## Purpose
-
-The accelerator processes real-time logs, financial transactions, sensor data, and other streaming data to generate actionable insights.
-
-## Implementation
-
-1.  **Data Ingestion:** Amazon Kinesis (or Kafka) ingests the incoming data stream.
-2.  **Real-time Processing:** Databricks Structured Streaming performs transformations and writes the processed data to Delta Lake.
-3.  **Storage:** Processed insights are stored in Amazon Redshift or S3 for analysis and reporting.
-
-## Use Cases
-
-1.  **Log Analytics:** Continuously process logs from applications, servers, or security systems to detect anomalies, failures, or security threats in real time.
-2.  **Financial Transactions Monitoring:** Monitor payment transactions for fraud detection, compliance checks, and anomaly detection.
-3.  **IoT & Sensor Data Processing:** Analyze real-time sensor readings from industrial machines, vehicles, or smart devices to identify operational issues or optimize performance.
-4.  **Clickstream Analysis:** Track user behavior on websites or mobile apps to personalize recommendations and detect potential bot traffic.
-5.  **Stock Market & Trading Analytics:** Process financial market data streams to execute algorithmic trading or provide real-time insights to traders.
 
 ## Key Benefits
 
-1.  **Low-latency insights:** Enables immediate decision-making based on real-time data.
-2.  **Scalability:** Handles large volumes of streaming data efficiently.
-3.  **Cost-effectiveness:** Leverages serverless processing with AWS Lambda for certain tasks.
-4.  **Integration with BI tools:** Seamlessly integrates with BI tools like QuickSight, Tableau, or Power BI for data visualization and reporting.
+1.  **Eliminates Airflow Dependency:**
+    *   **Reduces Infrastructure Overhead:** No need to manage an Airflow instance, reducing maintenance, scaling, and uptime concerns.
+    *   **Simplifies Workflow Management:** AWS Step Functions provide a fully managed orchestration service with built-in retry mechanisms.
 
-## Solution Overview
+2.  **Cost Efficiency:**
+    *   **Pay-as-you-go Model:** Serverless execution means you only pay for what you use, eliminating the need for persistent EC2 instances required by an Airflow setup.
+    *   **No Dedicated Orchestrator:** Removes the cost associated with running and maintaining an Airflow cluster.
 
-The solution comprises the following components:
+3.  **Native AWS Integration:**
+    *   **Step Functions for Orchestration:** Provides stateful execution of Databricks jobs with visual workflow tracking.
+    *   **Lambda for Triggering Jobs:** Serverless functions efficiently handle job execution, eliminating the need for a constantly running scheduler.
+    *   **CloudWatch Logging:** Centralized logging ensures easier debugging and monitoring.
 
-1.  **Infrastructure Provisioning:** Terraform manages the provisioning of AWS resources, including Kinesis, Redshift, S3, and Lambda.
-2.  **Streaming Data Ingestion:** AWS Kinesis captures and buffers the incoming real-time events.
-3.  **Real-time Processing:** Databricks Structured Streaming transforms the data and writes it to Delta Lake for efficient storage and querying.
-4.  **Storage:** Processed data is stored in Amazon Redshift and S3, providing flexibility for different analytical needs.
+4.  **Simplified Security and Access Control:**
+    *   **IAM-based Security:** Uses AWS IAM roles and policies to control access, making security management simpler than maintaining Airflow's role-based access.
+    *   **Integration with AWS Secrets Manager:** Securely manages Databricks API credentials (recommended).
+
+5.  **Scalability and Fault Tolerance:**
+    *   **Automatic Scaling:** AWS services scale automatically without provisioning resources.
+    *   **Built-in Error Handling:** Step Functions support error handling, retries, and fallback states, reducing manual intervention.
+
+## When to Use This Approach?
+
+*   If you don't want to manage Airflow and prefer AWS-native orchestration.
+*   If you need serverless and cost-efficient orchestration.
+*   If you want tighter integration with AWS services for logging, security, and monitoring.
+*   If you have simple to moderately complex workflows without Airflow-specific features like DAG dependencies.
+
+## Implementation
+
+1.  **Orchestration:** Step Functions orchestrate Databricks notebook execution.
+2.  **Job Triggering:** Lambda functions trigger jobs via the Databricks API.
+3.  **Logging:** Logs are stored in CloudWatch.
 
 ## Getting Started
 
@@ -46,254 +49,161 @@ The solution comprises the following components:
 ### Step 1: Clone the Repository
 ```sh
 git clone https://github.kadellabs.com/digiclave/databricks-accelerators.git
-cd databricks-accelerators\Accelerators\realtime_streaming_analytics
+cd databricks-accelerators\Accelerators\serverless_databricks_job_orchestrator
 ```
 
-Follow these steps to deploy and run the accelerator:
+Follow these steps to set up the Serverless Databricks Job Orchestrator:
 
-## 1. Prerequisites
+## 1. Create an IAM Role for Lambda
 
-1.  An AWS account.
-2.  Terraform installed.
-3.  A Databricks workspace.
-4.  Basic understanding of AWS services (Kinesis, S3, Redshift, Lambda, IAM).
-5.  Python 3.8 or higher installed locally (for Lambda deployment).
-6.  AWS CLI configured.
+1.  **Create IAM Role:** Create an IAM Role (e.g., `AWSLambdaBasicExecutionRole`) with permissions to:
+    *   Invoke Step Functions
+    *   Write logs to CloudWatch
+    *   Call Databricks API
 
-## 2. Infrastructure Provisioning (Terraform)
+2.  **Attach IAM Policy:** Attach the following IAM Policy (example - adjust as needed):
 
-1.  **Create Terraform Files:** Create a directory (e.g., `infra`) and create the `main.tf` file within it. Copy and paste the Terraform code provided below into `main.tf`.  **Important:** Replace placeholder values like passwords, bucket names, and region with your actual values.  Also, review the IAM policies and ensure they are appropriate for your security requirements (avoid overly permissive policies like `AmazonS3FullAccess` in production).
-
-    ```terraform
-    # infra/main.tf
-
-    provider "aws" {
-      region = "us-east-1" # Replace with your region
-    }
-
-    # Kinesis Stream
-    resource "aws_kinesis_stream" "data_stream" {
-      name             = "real-time-stream" # Replace if needed
-      shard_count      = 1
-      retention_period = 24
-    }
-
-    # S3 Bucket for Processed Data
-    resource "aws_s3_bucket" "processed_data" {
-      bucket = "streaming-processed-data-bucket" # Replace with your bucket name
-    }
-
-    # Redshift Cluster
-    resource "aws_redshift_cluster" "analytics_cluster" {
-      cluster_identifier = "analytics-cluster" # Replace if needed
-      database_name      = "analytics_db"
-      master_username    = "admin"
-      master_password    = "SuperSecurePass123!" # Replace with a strong password
-      node_type          = "dc2.large"
-      cluster_type       = "single-node"
-      skip_final_snapshot = true
-    }
-
-    # IAM Role for Databricks
-    resource "aws_iam_role" "databricks_role" {
-      name = "databricks-streaming-role" # Replace if needed
-      assume_role_policy = <<EOF
+    ```json
     {
       "Version": "2012-10-17",
       "Statement": [
         {
-          "Action": "sts:AssumeRole",
-          "Principal": { "Service": "ec2.amazonaws.com" },
-          "Effect": "Allow"
+          "Effect": "Allow",
+          "Action": [
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+          ],
+          "Resource": "*"
+        },
+        {
+          "Effect": "Allow",
+          "Action": "states:StartExecution",
+          "Resource": "*"
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "databricks:*" // Grant Databricks API permissions - refine as needed
+          ],
+          "Resource": "*"
         }
       ]
     }
-    EOF
-    }
-
-    # Attach policies to IAM Role (Example - Adjust permissions as needed)
-    resource "aws_iam_policy_attachment" "databricks_s3_access" {
-      name       = "databricks-s3-access"
-      roles      = [aws_iam_role.databricks_role.name]
-      policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess" # Consider more restrictive policy
-    }
-
-    #... (Other resources like Redshift IAM role, Lambda IAM role, etc.)
     ```
 
-2.  **Initialize Terraform:**
+## 2. Create a Lambda Function to Trigger Databricks Jobs
 
-    ```bash
-    cd infra/
-    terraform init
-    ```
+1.  **Create Lambda Function:** Go to AWS Lambda → Create a new function.
+2.  **Runtime:** Python 3.9 (or higher)
+3.  **Handler:** `lambda_function.lambda_handler`
+4.  **Execution Role:** Attach the IAM role created in Step 1.
 
-3.  **Plan and Apply:**
-
-    ```bash
-    terraform plan
-    terraform apply -auto-approve # Use -auto-approve cautiously in production
-    ```
-
-    Note the output values, especially the Kinesis stream name, S3 bucket name, and Redshift endpoint.
-
-## 3. Databricks Structured Streaming Code
-
-1.  **Create Databricks Notebook:** Create a new notebook (Python).
-
+5.  **Lambda Code (Python):**
 
     ```python
-    # Databricks Notebook (Python)
+    import json
+    import os
+    import requests
 
-    from pyspark.sql import SparkSession
-    from pyspark.sql.functions import col, from_json, expr
-    from pyspark.sql.types import StructType, StringType, IntegerType
+    # Databricks Configuration (Use Secrets Manager in production!)
+    DATABRICKS_INSTANCE = "https://<your-databricks-instance>" # Replace
+    DATABRICKS_TOKEN = "dapi-xxxxxxxxxxxxxxxxxxxx" # Replace or use Secrets Manager
+    DATABRICKS_JOB_ID = "<your-databricks-job-id>" # Replace
 
-    # Initialize Spark Session
-    spark = SparkSession.builder \
-      .appName("RealTimeStreamingAnalytics") \
-      .config("spark.jars.packages", "com.databricks:spark-redshift_2.12:2.0.1") \
-      .getOrCreate()
+    def lambda_handler(event, context):
+        url = f"{DATABRICKS_INSTANCE}/api/2.1/jobs/run-now"
+        headers = {
+            "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        payload = {"job_id": DATABRICKS_JOB_ID}
 
-    # Define Schema for Incoming Data (Example)
-    schema = StructType() \
-      .add("event_id", StringType()) \
-      .add("user_id", StringType()) \
-      .add("transaction_amount", IntegerType()) \
-      .add("event_timestamp", StringType())
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            response_data = response.json()
 
-    # Read Streaming Data from Kinesis
-    kinesis_stream = spark.readStream \
-      .format("kinesis") \
-      .option("streamName", "real-time-stream") # Replace with your stream name
-      .option("region", "us-east-1") # Replace with your region
-      .option("initialPosition", "LATEST") \
-      .load()
+            if response.status_code == 200:
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({"message": "Databricks job triggered", "run_id": response_data.get("run_id")})
+                }
+            else:
+                return {
+                    "statusCode": response.status_code,
+                    "body": json.dumps({"error": response_data})
+                }
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"error": str(e)})
+            }
+    ```
 
-    # Parse JSON Data
-    parsed_stream = kinesis_stream \
-      .selectExpr("CAST(data AS STRING) as jsonData") \
-      .select(from_json(col("jsonData"), schema).alias("data")) \
-      .select("data.*")
+6.  **Deploy Lambda Function:** Upload the code as a ZIP or paste it directly into the inline editor. Save and Deploy.
 
-    # Write to Delta Lake
-    delta_path = "s3://streaming-processed-data-bucket/delta-lake/" # Replace with your S3 path
-    query = parsed_stream.writeStream \
-      .format("delta") \
-      .outputMode("append") \
-      .option("checkpointLocation", delta_path + "/checkpoint/") \
-      .start(delta_path)
+## 3. Create an AWS Step Functions State Machine
 
-    # Write to Redshift
-    parsed_stream.write \
-      .format("com.databricks.spark.redshift") \
-      .option("url", "jdbc:redshift://[analytics-cluster.xxxxxxxx.region.redshift.amazonaws.com:5439/analytics_db](https://www.google.com/search?q=https://analytics-cluster.xxxxxxxx.region.redshift.amazonaws.com:5439/analytics_db)") # Replace with your Redshift URL
-      .option("dbtable", "real_time_events") \
-      .option("tempdir", "s3://streaming
+1.  **Open Step Functions:** Open Step Functions in AWS.
+2.  **Create State Machine:** Click Create State Machine → Choose Standard Workflow.
+3.  **State Machine Definition (JSON):** Use the following JSON:
 
-## Extracted Python Code from Notebooks
+    ```json
+    {
+      "Comment": "Step Function to orchestrate Databricks Jobs",
+      "StartAt": "TriggerDatabricksJob",
+      "States": {
+        "TriggerDatabricksJob": {
+          "Type": "Task",
+          "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:YourLambdaFunctionName",
+          "End": true,
+          "Retry": [
+            {
+              "ErrorEquals": ["States.TaskFailed"],
+              "IntervalSeconds": 5,
+              "MaxAttempts": 3,
+              "BackoffRate": 2.0
+            }
+          ],
+          "Catch": [
+            {
+              "ErrorEquals": ["States.ALL"],
+              "Next": "JobFailed"
+            }
+          ]
+        },
+        "JobFailed": {
+          "Type": "Fail",
+          "Cause": "Databricks Job Execution Failed"
+        }
+      }
+    }
+    ```
 
-### Realtime Streaming Analytics Code
+4.  **Replace:**
+    *   `REGION`: Your AWS region (e.g., `us-east-1`)
+    *   `ACCOUNT_ID`: Your AWS account ID
+    *   `YourLambdaFunctionName`: The Lambda function name
 
-```python
-# Use %run to import and access variables from another Databricks notebook
-```python
-%run "./Realtime Streaming Variables"
+5.  **Save and Deploy:** Save and Deploy the Step Function.
 
-from pyspark.sql import SparkSession 
-from pyspark.sql.functions import col, from_json, expr 
-from pyspark.sql.types import StructType, StringType, IntegerType 
+## 4. Test the Workflow
 
-spark = SparkSession.builder \ 
-    .appName("RealTimeStreamingAnalytics") \ 
-    .config("spark.jars.packages", "com.databricks:spark-redshift_2.12:2.0.1") \ 
-    .getOrCreate() 
+1.  **Trigger Step Function:** Manually trigger the Step Function.
 
-schema = StructType() \ 
-    .add("event_id", StringType()) \ 
-    .add("user_id", StringType()) \ 
-    .add("transaction_amount", IntegerType()) \ 
-    .add("event_timestamp", StringType()) 
+2.  **Verify Execution:** It should:
+    *   Call the Lambda function.
+    *   The Lambda function will invoke the Databricks Jobs API.
+    *   If successful, the job will run in Databricks.
+    *   If it fails, Step Functions will retry 3 times before marking as failed.
 
-kinesis_stream = spark.readStream \ 
-    .format("kinesis") \ 
-    .option("streamName", "real-time-stream") \ 
-    .option("region", "us-east-1") \ 
-    .option("initialPosition", "LATEST") \ 
-    .load() 
+## 5. Monitoring & Debugging
 
-parsed_stream = kinesis_stream \ 
+1.  **CloudWatch Logs:** Lambda execution logs are in AWS CloudWatch. Find them under `/aws/lambda/YourLambdaFunctionName`.
 
-    .selectExpr("CAST(data AS STRING) as jsonData") \ 
-    .select(from_json(col("jsonData"), schema).alias("data")) \ 
-    .select("data.*") 
+2.  **Step Functions Execution History:** Open AWS Step Functions → Select your State Machine. Navigate to Execution History for logs.
 
-
-
- delta_path
-
-query = parsed_stream.writeStream \ 
-    .format("delta") \ 
-    .outputMode("append") \ 
-    .option("checkpointLocation", delta_path + "/checkpoint/") \ 
-    .start(delta_path) 
-
- 
-
-parsed_stream.write \ 
-    .format("com.databricks.spark.redshift") \ 
-    .option("url", "jdbc:redshift://analytics-cluster.xxxxxxxx.region.redshift.amazonaws.com:5439/analytics_db") \ 
-    .option("dbtable", "real_time_events") \ 
-    .option("tempdir", "s3://streaming-processed-data-bucket/temp/") \ 
-    .mode("append") \ 
-    .save() 
-
-query.awaitTermination() 
-
-import boto3 
-
-import json 
-s3_client = boto3.client("s3") 
-
-sns_client = boto3.client("sns") 
-
- TOPIC_ARN 
-
-def lambda_handler(event, context): 
-
-    for record in event["Records"]: 
-
-        bucket = record["s3"]["bucket"]["name"] 
-
-        key = record["s3"]["object"]["key"] 
-
-        message = f"New processed data file in {bucket}: {key}" 
-
-    sns_client.publish( 
-
-            TopicArn=TOPIC_ARN, 
-
-            Message=message, 
-
-            Subject
-
-        ) 
-
-     
-
-    return {"statusCode": 200, "body": json.dumps("Notification Sent")} 
-```
-
-### Realtime Streaming Variables Code
-
-```python
-
-    delta_path =  "s3://streaming-processed-data-bucket/delta-lake/",
-    TOPIC_ARN =  "arn:aws:sns:us-east-1:123456789012:DataProcessed",
-    Subject="New Processed Data Available" 
-```
-
- ## Contributions
+## Contributions
 Feel free to submit pull requests for improvements or additional features.
  
 ## License
