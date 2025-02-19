@@ -1,126 +1,93 @@
-# Real-Time Data Flow: SQL Server to Databricks to Sigma
+# Real-time Streaming Analytics Accelerator
 
-## Overview
+This accelerator provides a framework for processing real-time data streams using AWS services like Amazon Kinesis, AWS Lambda, and Databricks Structured Streaming. It's designed to handle high-volume data ingestion, transformation, and storage for various use cases.
 
-This project demonstrates a real-time data flow pipeline between SQL Server, Databricks, and Sigma. The pipeline ensures that transactional data from SQL Server is processed in Databricks and visualized in Sigma, enabling real-time analytics.
+## Purpose
 
-## Components
+The accelerator processes real-time logs, financial transactions, sensor data, and other streaming data to generate actionable insights.
 
-- **SQL Server**: Source database containing transactional data.
-- **Databricks**: Processes and transforms data for analytics.
-- **Sigma**: Visualization tool for real-time data insights.
-- **Azure Event Hub (Optional)**: Used for real-time data streaming.
-- **Delta Lake**: Stores processed data for efficient querying.
+## Implementation
 
-## Workflow
+1.  **Data Ingestion:** Amazon Kinesis (or Kafka) ingests the incoming data stream.
+2.  **Real-time Processing:** Databricks Structured Streaming performs transformations and writes the processed data to Delta Lake.
+3.  **Storage:** Processed insights are stored in Amazon Redshift or S3 for analysis and reporting.
 
-1. **Data Ingestion**: SQL Server transactions are streamed using Change Data Capture (CDC) or an ETL pipeline.
-2. **Databricks Processing**: Data is ingested into Databricks, cleaned, and stored in Delta Lake.
-3. **Data Transformation**: Business logic is applied to process raw data.
-4. **Sigma Integration**: The processed data is visualized using Sigma dashboards.
+## Use Cases
 
-## Prerequisites
+1.  **Log Analytics:** Continuously process logs from applications, servers, or security systems to detect anomalies, failures, or security threats in real time.
+2.  **Financial Transactions Monitoring:** Monitor payment transactions for fraud detection, compliance checks, and anomaly detection.
+3.  **IoT & Sensor Data Processing:** Analyze real-time sensor readings from industrial machines, vehicles, or smart devices to identify operational issues or optimize performance.
+4.  **Clickstream Analysis:** Track user behavior on websites or mobile apps to personalize recommendations and detect potential bot traffic.
+5.  **Stock Market & Trading Analytics:** Process financial market data streams to execute algorithmic trading or provide real-time insights to traders.
 
-- SQL Server instance with transactional data.
-- Databricks workspace setup.
-- Sigma account for visualization.
-- (Optional) Azure Event Hub for real-time streaming.
+## Key Benefits
 
+1.  **Low-latency insights:** Enables immediate decision-making based on real-time data.
+2.  **Scalability:** Handles large volumes of streaming data efficiently.
+3.  **Cost-effectiveness:** Leverages serverless processing with AWS Lambda for certain tasks.
+4.  **Integration with BI tools:** Seamlessly integrates with BI tools like QuickSight, Tableau, or Power BI for data visualization and reporting.
 
-## Databricks SQL Queries
+## Solution Overview
 
-### A2RawData Query
-```sql
-%sql
-SELECT
-  c.Ticker,
-  c.Issuer,
-  c.ResourceProvider,
-  c.StartDate,
-  c.EndDate,
-  c.AdjustedValue,
-  c.Location,
-  c.Region,
-  c.Format,
-  c.Value,
-  c.Currency,
-  c.Title,
-  c.AggregatedStatus,
-  c.Attendee,
-  c.Status,
-  c.Note,
-  c.Team,
-  c.CreatedAt,
-  c.LastUpdate,
-  c.CreatedBy,
-  c.LastUpdateBy,
-  c.InOffice,
-  c.AllDay,
-  c.CreatedByIngestor,
-  c.BuysideStatus,
-  c.IsReviewRequired,
-  c.Id,
-  c.SplitTeam AS research_splits,
-  CASE
-    WHEN bc.broker IS NOT NULL THEN bc.broker
-    ELSE 'Other'
-  END AS ParentBroker
-FROM
-  (
-    SELECT
-      MAX(resource_provider) AS resource_provider,
-      broker
-    FROM
-      freerider.sigma_input.broker_mapping
-    GROUP BY
-      broker
-  ) bc
-RIGHT JOIN (
-  SELECT
-    r.*,
-    r.Value * CAST(rs.weighting AS DOUBLE) AS AdjustedValue,
-    rs.SplitTeam
-  FROM
-    risk_sql_prod.dbo.a2arecords r
-  INNER JOIN (
-    SELECT DISTINCT
-      fullname,
-      SplitTeam,
-      weighting
-    FROM (
-      SELECT
-        fullname,
-        team AS SplitTeam,
-        weighting,
-        ROW_NUMBER() OVER (
-          PARTITION BY fullname, team
-          ORDER BY fullname, team DESC
-        ) AS rn
-      FROM
-        freerider.sigma_input.research_split
-    ) rs
-    WHERE rn = 1
-  ) rs
-  ON r.Attendee = rs.fullname
-) c
-ON c.ResourceProvider = bc.resource_provider;
+The solution comprises the following components:
+
+1.  **Infrastructure Provisioning:** Terraform manages the provisioning of AWS resources, including Kinesis, Redshift, S3, and Lambda.
+2.  **Streaming Data Ingestion:** AWS Kinesis captures and buffers the incoming real-time events.
+3.  **Real-time Processing:** Databricks Structured Streaming transforms the data and writes it to Delta Lake for efficient storage and querying.
+4.  **Storage:** Processed data is stored in Amazon Redshift and S3, providing flexibility for different analytical needs.
+
+## Databricks Structured Streaming Code
+
+### Initializing Spark Session
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json
+from pyspark.sql.types import StructType, StringType, IntegerType
+
+spark = SparkSession.builder \
+    .appName("RealTimeStreamingAnalytics") \
+    .config("spark.jars.packages", "com.databricks:spark-redshift_2.12:2.0.1") \
+    .getOrCreate()
 ```
 
-## Sigma Integration
+### Defining Schema for Incoming Data
+```python
+schema = StructType() \
+    .add("event_id", StringType()) \
+    .add("user_id", StringType()) \
+    .add("transaction_amount", IntegerType()) \
+    .add("event_timestamp", StringType())
+```
 
-1. Connect to Databricks using JDBC.
-2. Use SQL queries to extract insights from Delta tables.
-3. Create real-time dashboards with the transformed data.
+### Reading Streaming Data from Kinesis
+```python
+kinesis_stream = spark.readStream \
+    .format("kinesis") \
+    .option("streamName", "real-time-stream") \
+    .option("region", "us-east-1") \
+    .option("initialPosition", "LATEST") \
+    .load()
+```
 
-## Deployment
+### Parsing JSON Data
+```python
+parsed_stream = kinesis_stream \
+    .selectExpr("CAST(data AS STRING) as jsonData") \
+    .select(from_json(col("jsonData"), schema).alias("data")) \
+    .select("data.*")
+```
 
-- Schedule a Databricks job to run the ETL pipeline at fixed intervals.
-- Use Databricks Delta Live Tables (DLT) for continuous processing.
-- Set up alerting and monitoring using Databricks or Sigma.
+### Writing to Delta Lake
+```python
+delta_path = "s3://streaming-processed-data-bucket/delta-lake/"
+query = parsed_stream.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", delta_path + "/checkpoint/") \
+    .start(delta_path)
 
-## Conclusion
-
-This pipeline enables real-time data flow from SQL Server to Databricks and visualization in Sigma, ensuring up-to-date insights for decision-making.
+query.awaitTermination()
+```
 
 ## Contributions
 Feel free to submit pull requests for improvements or additional features.
