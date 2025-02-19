@@ -1,213 +1,193 @@
-# Serverless Databricks Job Orchestrator
+# Automated Data Lineage & Compliance Reporting
 
-This solution eliminates the need for managing a separate orchestration tool like Airflow by leveraging AWS-native services such as Step Functions and Lambda to orchestrate Databricks notebook execution.
+## Overview
 
-## Serverless Databricks Job Orchestrator Architecture Flow
+This accelerator automates data lineage tracking and enforces security policies using AWS Macie, AWS IAM, and Databricks Unity Catalog. It helps organizations maintain data governance and comply with regulations by identifying sensitive data, tracking its movement, and restricting access as needed.
 
-![Serverless Databricks Job Orchestrator Architecture](docs/icons/Serverless_Databricks_Job_Orchestrator.png)
+## Automated Data Lineage & Compliance Reporting Architecture Flow
 
+![Automated_Data_Lineage_&_Compliance_Reporting_Architecture](docs/icons/Automated_Data_Lineage_&_Compliance_Reporting.png)
 
-## Key Benefits
+## Features
 
-1.  **Eliminates Airflow Dependency:**
-    *   **Reduces Infrastructure Overhead:** No need to manage an Airflow instance, reducing maintenance, scaling, and uptime concerns.
-    *   **Simplifies Workflow Management:** AWS Step Functions provide a fully managed orchestration service with built-in retry mechanisms.
+- **Sensitive Data Discovery:** AWS Macie scans S3 data for sensitive information.
+- **Data Lineage Tracking:** Databricks Unity Catalog tracks data lineage for better understanding and governance.
+- **Dynamic Access Control:** AWS IAM roles and policies dynamically enforce access restrictions based on Macie findings.
+- **Automated Workflow:** AWS Step Functions orchestrates the entire process, from Macie scans to IAM policy updates.
 
-2.  **Cost Efficiency:**
-    *   **Pay-as-you-go Model:** Serverless execution means you only pay for what you use, eliminating the need for persistent EC2 instances required by an Airflow setup.
-    *   **No Dedicated Orchestrator:** Removes the cost associated with running and maintaining an Airflow cluster.
+## Prerequisites
 
-3.  **Native AWS Integration:**
-    *   **Step Functions for Orchestration:** Provides stateful execution of Databricks jobs with visual workflow tracking.
-    *   **Lambda for Triggering Jobs:** Serverless functions efficiently handle job execution, eliminating the need for a constantly running scheduler.
-    *   **CloudWatch Logging:** Centralized logging ensures easier debugging and monitoring.
+Before using this accelerator, ensure the following:
 
-4.  **Simplified Security and Access Control:**
-    *   **IAM-based Security:** Uses AWS IAM roles and policies to control access, making security management simpler than maintaining Airflow's role-based access.
-    *   **Integration with AWS Secrets Manager:** Securely manages Databricks API credentials (recommended).
+- An AWS account with necessary permissions (Macie, IAM, Lambda, Step Functions, S3).
+- A Databricks workspace with Unity Catalog enabled.
+- Basic understanding of AWS services (Macie, IAM, Lambda, Step Functions, S3).
 
-5.  **Scalability and Fault Tolerance:**
-    *   **Automatic Scaling:** AWS services scale automatically without provisioning resources.
-    *   **Built-in Error Handling:** Step Functions support error handling, retries, and fallback states, reducing manual intervention.
-
-## When to Use This Approach?
-
-*   If you don't want to manage Airflow and prefer AWS-native orchestration.
-*   If you need serverless and cost-efficient orchestration.
-*   If you want tighter integration with AWS services for logging, security, and monitoring.
-*   If you have simple to moderately complex workflows without Airflow-specific features like DAG dependencies.
-
-## Implementation
-
-1.  **Orchestration:** Step Functions orchestrate Databricks notebook execution.
-2.  **Job Triggering:** Lambda functions trigger jobs via the Databricks API.
-3.  **Logging:** Logs are stored in CloudWatch.
-
-## Getting Started
-
+## Setup Instructions
 
 ### Step 1: Clone the Repository
-```sh
+```bash
 git clone https://github.kadellabs.com/digiclave/databricks-accelerators.git
-cd databricks-accelerators\Accelerators\serverless_databricks_job_orchestrator
+cd databricks-accelerators/Accelerators/automated_data_lineage_compliance_reporting
 ```
 
-Follow these steps to set up the Serverless Databricks Job Orchestrator:
+### Step 2: Install Dependencies
+Ensure the required Python libraries are installed in your Databricks cluster:
 
-## 1. Create an IAM Role for Lambda
+```python
+import boto3 
+import json 
+import os 
+macie = boto3.client("macie2") 
+s3_bucket = S3_BUCKET 
+macie_role_arn = MACIE_ROLE_ARN
 
-1.  **Create IAM Role:** Create an IAM Role (e.g., `AWSLambdaBasicExecutionRole`) with permissions to:
-    *   Invoke Step Functions
-    *   Write logs to CloudWatch
-    *   Call Databricks API
 
-2.  **Attach IAM Policy:** Attach the following IAM Policy (example - adjust as needed):
+def lambda_handler(event, context): 
+    try: 
+        response = macie.create_classification_job( 
+            name="SensitiveDataScan", 
+            description="Scans S3 for sensitive data", 
+            jobType="ONE_TIME", 
+            s3JobDefinition={ 
+                "bucketDefinitions": [{"accountId": AWS_ACCOUNT_ID, "buckets": [s3_bucket]}] 
+            }, 
+            roleArn=macie_role_arn, 
+            customDataIdentifiers={"ids": []}, 
+            samplingPercentage=100 
+        ) 
+        return {"statusCode": 200, "body": json.dumps(response)} 
+    except Exception as e: 
+        return {"statusCode": 500, "body": str(e)} 
 
-    ```json
-    {
-      "Version": "2012-10-17",
-      "Statement": [
+```
+
+### Step 3: Create and Configure AWS Lambda Functions
+1. **Trigger Macie Scan Lambda**: This Lambda triggers the AWS Macie scan.
+2. **Set Up Databricks Unity Catalog Lineage**: Ensure Unity Catalog is enabled and set up the required tables.
+3. **Apply IAM Security Policies**: Create a Lambda function to enforce IAM policies based on Macie findings.
+4. **Step Functions Orchestration**: Use AWS Step Functions to coordinate these services.
+
+
+### Step 4: Set Up AWS Step Functions
+
+Here’s a sample Step Function definition to automate the workflow:
+
+```json
+{
+  "StartAt": "TriggerMacieScan",
+  "States": {
+    "TriggerMacieScan": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:YOUR_AWS_REGION:YOUR_ACCOUNT_ID:function:trigger-macie",
+      "Next": "CheckMacieResults",
+      "ResultPath": "$.macie_results"
+    },
+    "CheckMacieResults": {
+      "Type": "Choice",
+      "Choices": [
         {
-          "Effect": "Allow",
-          "Action": [
-            "logs:CreateLogGroup",
-            "logs:CreateLogStream",
-            "logs:PutLogEvents"
-          ],
-          "Resource": "*"
-        },
-        {
-          "Effect": "Allow",
-          "Action": "states:StartExecution",
-          "Resource": "*"
-        },
-        {
-          "Effect": "Allow",
-          "Action": [
-            "databricks:*" // Grant Databricks API permissions - refine as needed
-          ],
-          "Resource": "*"
+          "Variable": "$.macie_results.Payload.body.findingsCount",
+          "NumericGreaterThan": 0,
+          "Next": "GenerateIAMPolicy"
         }
-      ]
+      ],
+      "Default": "EndProcess"
+    },
+    "GenerateIAMPolicy": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:YOUR_AWS_REGION:YOUR_ACCOUNT_ID:function:generate-iam-policy",
+      "Next": "ApplyIAMRestrictions",
+      "ResultPath": "$.iam_policy"
+    },
+    "ApplyIAMRestrictions": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:YOUR_AWS_REGION:YOUR_ACCOUNT_ID:function:apply-iam-restrictions",
+      "Parameters": {
+        "policy": "$.iam_policy.Payload"
+      },
+      "End": true
+    },
+    "EndProcess": {
+      "Type": "Pass",
+      "End": true
     }
-    ```
+  }
+}
+```
 
-## 2. Create a Lambda Function to Trigger Databricks Jobs
+### Step 5: IAM Policy for Sensitive Data
 
-1.  **Create Lambda Function:** Go to AWS Lambda → Create a new function.
-2.  **Runtime:** Python 3.9 (or higher)
-3.  **Handler:** `lambda_function.lambda_handler`
-4.  **Execution Role:** Attach the IAM role created in Step 1.
+Create an IAM policy for restricting access to sensitive data identified by AWS Macie:
 
-5.  **Lambda Code (Python):**
-
-    ```python
-    import json
-    import os
-    import requests
-
-    # Databricks Configuration (Use Secrets Manager in production!)
-    DATABRICKS_INSTANCE = "https://<your-databricks-instance>" # Replace
-    DATABRICKS_TOKEN = "dapi-xxxxxxxxxxxxxxxxxxxx" # Replace or use Secrets Manager
-    DATABRICKS_JOB_ID = "<your-databricks-job-id>" # Replace
-
-    def lambda_handler(event, context):
-        url = f"{DATABRICKS_INSTANCE}/api/2.1/jobs/run-now"
-        headers = {
-            "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        payload = {"job_id": DATABRICKS_JOB_ID}
-
-        try:
-            response = requests.post(url, headers=headers, json=payload)
-            response_data = response.json()
-
-            if response.status_code == 200:
-                return {
-                    "statusCode": 200,
-                    "body": json.dumps({"message": "Databricks job triggered", "run_id": response_data.get("run_id")})
-                }
-            else:
-                return {
-                    "statusCode": response.status_code,
-                    "body": json.dumps({"error": response_data})
-                }
-        except Exception as e:
-            return {
-                "statusCode": 500,
-                "body": json.dumps({"error": str(e)})
-            }
-    ```
-
-6.  **Deploy Lambda Function:** Upload the code as a ZIP or paste it directly into the inline editor. Save and Deploy.
-
-## 3. Create an AWS Step Functions State Machine
-
-1.  **Open Step Functions:** Open Step Functions in AWS.
-2.  **Create State Machine:** Click Create State Machine → Choose Standard Workflow.
-3.  **State Machine Definition (JSON):** Use the following JSON:
-
-    ```json
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
     {
-      "Comment": "Step Function to orchestrate Databricks Jobs",
-      "StartAt": "TriggerDatabricksJob",
-      "States": {
-        "TriggerDatabricksJob": {
-          "Type": "Task",
-          "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:YourLambdaFunctionName",
-          "End": true,
-          "Retry": [
-            {
-              "ErrorEquals": ["States.TaskFailed"],
-              "IntervalSeconds": 5,
-              "MaxAttempts": 3,
-              "BackoffRate": 2.0
-            }
-          ],
-          "Catch": [
-            {
-              "ErrorEquals": ["States.ALL"],
-              "Next": "JobFailed"
-            }
-          ]
-        },
-        "JobFailed": {
-          "Type": "Fail",
-          "Cause": "Databricks Job Execution Failed"
+      "Effect": "Deny",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::your-data-bucket",
+        "arn:aws:s3:::your-data-bucket/sensitive-data/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/AccessLevel": "Restricted"
         }
       }
     }
-    ```
+  ]
+}
+```
 
-4.  **Replace:**
-    *   `REGION`: Your AWS region (e.g., `us-east-1`)
-    *   `ACCOUNT_ID`: Your AWS account ID
-    *   `YourLambdaFunctionName`: The Lambda function name
+### Step 6: Set Up Databricks Unity Catalog
 
-5.  **Save and Deploy:** Save and Deploy the Step Function.
+Use the following SQL commands to configure Unity Catalog and enable data lineage:
 
-## 4. Test the Workflow
+```sql
+-- Create a Metastore
+CREATE METASTORE my_metastore
+  MANAGED LOCATION 's3://databricks-unity-bucket/';
 
-1.  **Trigger Step Function:** Manually trigger the Step Function.
+-- Create Catalog and Schema
+CREATE CATALOG my_catalog;
+USE CATALOG my_catalog;
+CREATE SCHEMA my_schema;
+USE my_schema;
 
-2.  **Verify Execution:** It should:
-    *   Call the Lambda function.
-    *   The Lambda function will invoke the Databricks Jobs API.
-    *   If successful, the job will run in Databricks.
-    *   If it fails, Step Functions will retry 3 times before marking as failed.
+-- Create a Table with Lineage Tracking
+CREATE TABLE customer_data (
+  id INT,
+  name STRING,
+  email STRING
+) USING DELTA;
+```
 
-## 5. Monitoring & Debugging
+Enable lineage tracking in Databricks with the following Python code:
 
-1.  **CloudWatch Logs:** Lambda execution logs are in AWS CloudWatch. Find them under `/aws/lambda/YourLambdaFunctionName`.
+```python
+from pyspark.sql import SparkSession
 
-2.  **Step Functions Execution History:** Open AWS Step Functions → Select your State Machine. Navigate to Execution History for logs.
+# Create Spark session with Unity Catalog
+spark = SparkSession.builder \
+    .config("spark.databricks.unityCatalog.enabled", "true") \
+    .getOrCreate()
+
+# Read and display data lineage
+df = spark.read.table("my_catalog.my_schema.customer_data")
+display(df.explain(True))
+```
 
 ## Contributions
 Feel free to submit pull requests for improvements or additional features.
- 
+
 ## License
 This project is licensed under the **MIT License**.
- 
+
 ## Contact
-For issues or support, reach out via **GitHub Issues** or email the project maintainer
+For issues or support, reach out via **GitHub Issues** or email the project maintainer.
+
